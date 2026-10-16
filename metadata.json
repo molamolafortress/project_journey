@@ -1,0 +1,8 @@
+{
+  "name": "진정한 나를 찾아가는 여행 (True Self Odyssey)",
+  "description": "시한부 6개월과 $100,000 예산 속에서 미뤄왔던 소망들을 마주하고 진정한 자신을 발견하는 내러티브 인터랙티브 웹게임",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
