@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 import { estimateRealisticBucketItem, checkNeedsRefinement, generateArgonProfile } from './src/game/engine';
+import { Language } from './src/types/game';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,20 +29,57 @@ const ai = new GoogleGenAI({
  * Infers realistic cost, duration, lifespan bonus, story narrative, and chronicle using Gemini Flash.
  */
 app.post('/api/gemini/analyze', async (req: Request, res: Response) => {
-  const { text, id } = req.body;
+  const { text, id, lang } = req.body;
+  const language: Language = lang === 'en' ? 'en' : 'ko';
   if (!text || typeof text !== 'string') {
     return res.status(400).json({ error: 'Text is required' });
   }
 
   const itemId = Number(id) || 1;
-  const fallback = estimateRealisticBucketItem(text, itemId);
+  const fallback = estimateRealisticBucketItem(text, itemId, language);
 
   if (!process.env.GEMINI_API_KEY) {
     return res.json(fallback);
   }
 
   try {
-    const prompt = `당신은 시한부 6개월 인생 게임의 '스토리텔러이자 현실 분석관'입니다.
+    const prompt = language === 'en'
+      ? `You are the 'Storyteller and Reality Analyst' for a life-reflection game where the player has 6 months left to live and a $100,000 budget.
+Player's bucket list wish: "${text.trim()}"
+
+[Core Guidelines for Wish Interpretation & Realistic Cost Estimation]
+1. Experiential Detour for Impossible/Supernatural/Extreme Wishes:
+   - If the player enters something physically or legally impossible (e.g., 'Buy/launch a nuclear missile', 'Become omnipotent', 'Get Elsa's ice powers', 'Time travel'), NEVER reject it coldly or charge billions of dollars.
+   - Instead, reinterpret it into a creative, psychological, experiential detour project achievable within a $1,000–$15,000 budget (e.g., lucid dreaming sleep clinic for omnipotence, desert rocket launch & decommissioned missile silo tour for nuclear missile, ice hotel + special effects studio for Elsa's powers, childhood neighborhood restoration for time travel).
+2. Strict Real-World Market Prices for Everyday Wishes:
+   - 14-day US trip: $5,000–$7,500
+   - 14-day Europe trip: $4,500–$6,500
+   - Home party for 20 friends: $1,200–$2,500
+   - Family/friend reconciliation dinner: $200–$600
+   - Independent essay book publishing (300 copies): $3,500–$5,000
+3. Output Language: Write ALL text fields in natural, deeply moving English.
+4. Fields:
+   - cost (number in USD)
+   - costBreakdown (string, e.g., "Round-trip flights $1,500 + Lodging $2,500 + Meals $2,000 = Total $6,000")
+   - rationale (string, 2-3 warm sentences explaining the realistic pricing or experiential detour)
+   - feasibility: "realistic" | "high_cost" | "extreme"
+   - daysSpent (number, typically 3 to 30)
+   - lifespanDelta (number, 0.8 to 2.4 months of life vitality gained)
+   - story (string, 2 deeply emotional paragraphs separated by \\n\\n in second person "you")
+   - chronicle (string, 2 poetic sentences for the final ending chronicle)
+
+Respond ONLY in pure JSON without markdown:
+{
+  "cost": number,
+  "costBreakdown": string,
+  "rationale": string,
+  "feasibility": "realistic" | "high_cost" | "extreme",
+  "daysSpent": number,
+  "lifespanDelta": number,
+  "story": string,
+  "chronicle": string
+}`
+      : `당신은 시한부 6개월 인생 게임의 '스토리텔러이자 현실 분석관'입니다.
 플레이어의 버킷리스트 항목: "${text.trim()}"
 
 [소망 해석 및 비용 산정 핵심 지침]
@@ -128,19 +166,34 @@ app.post('/api/gemini/analyze', async (req: Request, res: Response) => {
  * Uses Gemini Flash to provide 3 concrete suggestions if the user entered a vague single word.
  */
 app.post('/api/gemini/refine', async (req: Request, res: Response) => {
-  const { text } = req.body;
+  const { text, lang } = req.body;
+  const language: Language = lang === 'en' ? 'en' : 'ko';
   if (!text || typeof text !== 'string') {
     return res.status(400).json({ error: 'Text is required' });
   }
 
-  const fallback = checkNeedsRefinement(text);
+  const fallback = checkNeedsRefinement(text, language);
 
   if (!process.env.GEMINI_API_KEY) {
-    return res.json(fallback || { question: `'${text}'을 구체화해볼까요?`, options: [`${text} 구체화 1`, `${text} 구체화 2`, `${text} 구체화 3`] });
+    return res.json(
+      fallback ||
+        (language === 'en'
+          ? { question: `Shall we make '${text}' more specific?`, options: [`${text} — Option 1`, `${text} — Option 2`, `${text} — Option 3`] }
+          : { question: `'${text}'을 구체화해볼까요?`, options: [`${text} 구체화 1`, `${text} 구체화 2`, `${text} 구체화 3`] })
+    );
   }
 
   try {
-    const prompt = `사용자가 버킷리스트로 짧고 모호하게 "${text.trim()}"라고만 입력했습니다.
+    const prompt =
+      language === 'en'
+        ? `The user entered a short or vague bucket list wish: "${text.trim()}".
+Suggest 1 warm, inviting question to help them make this wish more vivid, along with 3 concrete, inspiring options in English.
+Respond ONLY in pure JSON without markdown:
+{
+  "question": "Warm question in English",
+  "options": ["Concrete option 1", "Concrete option 2", "Concrete option 3"]
+}`
+        : `사용자가 버킷리스트로 짧고 모호하게 "${text.trim()}"라고만 입력했습니다.
 이 소망을 조금 더 구체적인 컨셉으로 다듬을 수 있는 다정한 질문 1개와, 구체화된 선택지 3개를 추천하세요.
 반드시 마크다운 없이 순수 JSON으로 응답하세요:
 {
@@ -172,11 +225,13 @@ app.post('/api/gemini/refine', async (req: Request, res: Response) => {
  * Background "Argon" profiling agent deriving the player's Genuine Self (coreValue, summary, repressedDesires).
  */
 app.post('/api/gemini/profile', async (req: Request, res: Response) => {
-  const { items } = req.body;
+  const { items, lang } = req.body;
+  const language: Language = lang === 'en' ? 'en' : 'ko';
   const itemsList: string[] = Array.isArray(items) ? items : [];
 
   const fallback = generateArgonProfile(
-    itemsList.map((t, idx) => estimateRealisticBucketItem(t, idx + 1))
+    itemsList.map((t, idx) => estimateRealisticBucketItem(t, idx + 1, language)),
+    language
   );
 
   if (!process.env.GEMINI_API_KEY || itemsList.length === 0) {
@@ -184,7 +239,20 @@ app.post('/api/gemini/profile', async (req: Request, res: Response) => {
   }
 
   try {
-    const prompt = `당신은 심리 분석 에이전트 'Argon'입니다.
+    const prompt =
+      language === 'en'
+        ? `You are the deep psychological profiling agent 'Argon'.
+Here are the 10 bucket list wishes written by a player facing a 6-month terminal diagnosis:
+[${itemsList.join(' / ')}]
+
+Analyze what this person has repressed in daily reality and what core value their Genuine Self truly yearns for deep down.
+Respond ONLY in pure JSON in English without markdown:
+{
+  "coreValue": "One-line core value (e.g., A life lived at my own rhythm and genuine connection)",
+  "summary": "A deeply moving, warm 3-sentence inner psychological analysis",
+  "repressedDesires": "Analysis of the desires that were held back due to busyness and others' expectations"
+}`
+        : `당신은 심리 분석 에이전트 'Argon'입니다.
 플레이어가 6개월 시한부를 앞두고 작성한 10가지 버킷리스트:
 [${itemsList.join(' / ')}]
 
@@ -209,6 +277,7 @@ app.post('/api/gemini/profile', async (req: Request, res: Response) => {
       const parsed = JSON.parse(rawText);
       return res.json({
         status: 'ready',
+        model: 'gemini-4-argon',
         coreValue: parsed.coreValue || fallback.coreValue,
         summary: parsed.summary || fallback.summary,
         repressedDesires: parsed.repressedDesires || fallback.repressedDesires,
@@ -224,7 +293,7 @@ app.post('/api/gemini/profile', async (req: Request, res: Response) => {
 /**
  * 4. POST /api/gemini/generate-artwork
  * Generates an individualized commemorative artwork based on the player's profile and chosen journey.
- * Uses gemini-3.1-flash-lite-image.
+ * Uses gemini-3.1-flash-lite-image directly in a single fast call.
  */
 app.post('/api/gemini/generate-artwork', async (req: Request, res: Response) => {
   const { coreValue, summary, history, theme } = req.body;
@@ -238,26 +307,13 @@ app.post('/api/gemini/generate-artwork', async (req: Request, res: Response) => 
       ? history.map((h: { text?: string }) => h.text || '').filter(Boolean).join(', ')
       : '';
 
-    // Step 1: Craft artistic concept prompt in English
-    const conceptPrompt = `당신은 시한부 6개월 게임의 예술 감독입니다.
-플레이어의 진정한 내면 핵심 가치: "${coreValue || '나만의 온전한 호흡으로 살아가는 삶'}"
-내면 분석 요약: "${summary || '세상의 잣대를 벗어나 온전한 평온을 찾음'}"
-플레이어가 선택한 소망들: [${historyText || '소중한 인연들과의 따뜻한 식탁, 나만의 작은 책 출판, 밤하늘 오로라'}]
-스타일 톤: ${theme === 'black' ? 'Dark cinematic fantasy, deep cosmos, serene glowing light' : 'Warm atmospheric watercolor and modern Korean aesthetic, golden hour sunlight, peaceful landscape'}
+    const styleDesc =
+      theme === 'black'
+        ? 'Dark cinematic fantasy concept art, deep starry cosmos, serene glowing golden and aurora light, masterpiece 8k illustration, no text'
+        : 'Warm atmospheric Korean watercolor and modern cinematic concept art on hanji texture, golden hour sunlight, serene breathtaking landscape, peaceful and uplifting mood, masterpiece 8k illustration, no text';
 
-이 사람의 영혼과 여정을 기리는 단 하나의 헌정 명화를 제작하기 위한 고품질 영문 이미지 생성 프롬프트(1문장)를 작성하세요.
-절대 인물이 고통받거나 아파 보이지 않게 하고, 따뜻한 평온, 경이로운 자연, 빛, 진정한 자유가 느껴지도록 묘사하세요.
-한자나 마크다운 없이 오직 영문 프롬프트 1문장만 출력하세요:`;
+    const imagePrompt = `Create a breathtaking, emotionally moving commemorative illustration symbolizing a person's life journey and inner soul. Core value: "${coreValue || 'Living at one’s own authentic rhythm'}". Inner profile: "${summary || 'Finding peace and freedom beyond the world’s standards'}". Key life wishes fulfilled: [${historyText || 'Warm dinner table with loved ones, publishing a personal book, watching the aurora'}]. Visual style: ${styleDesc}. Do not include any letters, words, or text in the image.`;
 
-    const promptRes = await ai.models.generateContent({
-      model: 'gemini-flash-latest',
-      contents: conceptPrompt,
-    });
-
-    const imagePrompt = promptRes.text?.trim() ||
-      'A breathtaking serene artwork of a solitary traveler on a peaceful hill under warm golden morning light and ethereal starlight, watercolor and concept art aesthetic, 8k masterpiece';
-
-    // Step 2: Generate image with gemini-3.1-flash-lite-image
     const imageRes = await ai.models.generateContent({
       model: 'gemini-3.1-flash-lite-image',
       contents: imagePrompt,
@@ -285,6 +341,7 @@ app.post('/api/gemini/generate-artwork', async (req: Request, res: Response) => 
       return res.json({
         imageUrl: `data:${mimeType};base64,${base64Data}`,
         prompt: imagePrompt,
+        model: 'gemini-3.1-flash-lite-image',
       });
     }
 

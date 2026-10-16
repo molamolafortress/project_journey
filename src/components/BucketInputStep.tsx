@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { BucketItem, RefinementSuggestion, ColorTheme } from '../types/game';
-import { REALISTIC_SEEDS } from '../data/realisticDb';
+import { BucketItem, RefinementSuggestion, ColorTheme, Language } from '../types/game';
+import { getRealisticSeeds } from '../data/realisticDb';
 import { Sparkles, ArrowRight } from 'lucide-react';
 
 interface BucketInputStepProps {
   bucketList: BucketItem[];
   targetCount: number;
   colorTheme: ColorTheme;
+  lang: Language;
   onAddItem: (text: string) => void;
   onAutoFill: () => void;
 }
@@ -15,6 +16,7 @@ export const BucketInputStep: React.FC<BucketInputStepProps> = ({
   bucketList,
   targetCount,
   colorTheme,
+  lang,
   onAddItem,
   onAutoFill
 }) => {
@@ -24,11 +26,12 @@ export const BucketInputStep: React.FC<BucketInputStepProps> = ({
   const [exampleOffset, setExampleOffset] = useState(0);
 
   const isHanji = colorTheme === 'hanji';
+  const isEn = lang === 'en';
   const currentCount = bucketList.length < targetCount ? bucketList.length + 1 : targetCount;
 
   // Available examples excluding already added
   const alreadyTexts = bucketList.map((b) => b.text);
-  const availableSeeds = REALISTIC_SEEDS.filter((s) => !alreadyTexts.includes(s.text));
+  const availableSeeds = getRealisticSeeds(lang).filter((s) => !alreadyTexts.includes(s.text));
   const currentExamples = availableSeeds.slice(exampleOffset, exampleOffset + 5);
 
   const handleShuffleExamples = () => {
@@ -41,14 +44,19 @@ export const BucketInputStep: React.FC<BucketInputStepProps> = ({
     const raw = inputText.trim();
     if (!raw) return;
 
-    // If input is short or abstract, check with Gemini Flash refine API
-    if (raw.length <= 4 || ['여행', '운동', '공부', '음악', '책', '행복', '휴식', '돈'].includes(raw)) {
+    const lower = raw.toLowerCase();
+    const needsRefine = isEn
+      ? (raw.split(/\s+/).length <= 1 && raw.length <= 10) ||
+        ['travel', 'trip', 'exercise', 'study', 'music', 'book', 'happiness', 'rest', 'money', 'love', 'art', 'cooking'].includes(lower)
+      : raw.length <= 4 || ['여행', '운동', '공부', '음악', '책', '행복', '휴식', '돈'].includes(raw);
+
+    if (needsRefine) {
       setIsRefining(true);
       try {
         const res = await fetch('/api/gemini/refine', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: raw })
+          body: JSON.stringify({ text: raw, lang })
         });
         const data = await res.json();
         if (data && data.options && data.options.length > 0) {
@@ -96,10 +104,14 @@ export const BucketInputStep: React.FC<BucketInputStepProps> = ({
             isHanji ? 'text-[#1c1a18]' : 'text-white'
           }`}
         >
-          당신이 진정으로 원하는 10가지는 무엇인가요?
+          {isEn
+            ? 'What are the 10 things you truly wish to do in life?'
+            : '당신이 진정으로 원하는 10가지는 무엇인가요?'}
         </h1>
         <p className={`text-sm ${isHanji ? 'text-[#5a544a]' : 'text-neutral-400'}`}>
-          바쁜 일상에 치여 마음 한구석에 미뤄두었던 소망들을 하나씩 적어보세요.
+          {isEn
+            ? 'Write down the wishes you have quietly set aside in a corner of your heart amidst a busy life.'
+            : '바쁜 일상에 치여 마음 한구석에 미뤄두었던 소망들을 하나씩 적어보세요.'}
         </p>
       </div>
 
@@ -117,7 +129,11 @@ export const BucketInputStep: React.FC<BucketInputStepProps> = ({
             id="bucket-input"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            placeholder="하고 싶은 것을 적어주세요 (단순 단어 입력 시 Gemini가 구체화를 제안합니다)"
+            placeholder={
+              isEn
+                ? 'Type a wish (Gemini will suggest vivid ideas if you enter a single word)'
+                : '하고 싶은 것을 적어주세요 (단순 단어 입력 시 Gemini가 구체화를 제안합니다)'
+            }
             className={`flex-1 border rounded-lg px-4 py-3 transition text-sm md:text-base focus:outline-none ${
               isHanji
                 ? 'bg-[#faf8f2] border-[#cfc6b2] text-[#1c1a18] placeholder:text-[#999081] focus:border-[#1c1a18]'
@@ -133,7 +149,11 @@ export const BucketInputStep: React.FC<BucketInputStepProps> = ({
                 : 'bg-white hover:bg-neutral-200 text-black'
             }`}
           >
-            <span>{isRefining ? '분석중...' : '다음'}</span>
+            <span>
+              {isRefining
+                ? isEn ? 'Thinking...' : '분석중...'
+                : isEn ? 'Add' : '다음'}
+            </span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </form>
@@ -182,7 +202,11 @@ export const BucketInputStep: React.FC<BucketInputStepProps> = ({
             isHanji ? 'text-[#665e53]' : 'text-neutral-400'
           }`}
         >
-          <span>💡 다른 사람들의 버킷리스트 예시 (클릭 시 입력창에 채워집니다)</span>
+          <span>
+            {isEn
+              ? '💡 Inspiration from others’ bucket lists (Click to fill the input box)'
+              : '💡 다른 사람들의 버킷리스트 예시 (클릭 시 입력창에 채워집니다)'}
+          </span>
           <div className="flex items-center gap-3 shrink-0">
             <button
               onClick={handleShuffleExamples}
@@ -190,7 +214,7 @@ export const BucketInputStep: React.FC<BucketInputStepProps> = ({
                 isHanji ? 'hover:text-[#1c1a18]' : 'hover:text-white'
               }`}
             >
-              다른 예시 보기
+              {isEn ? 'More examples' : '다른 예시 보기'}
             </button>
             <button
               onClick={onAutoFill}
@@ -198,7 +222,7 @@ export const BucketInputStep: React.FC<BucketInputStepProps> = ({
                 isHanji ? 'text-[#b83a2b] hover:text-[#912c20]' : 'text-white hover:text-neutral-300'
               }`}
             >
-              [⚡ 테스트용: 남은 칸 한번에 채우기]
+              {isEn ? '[⚡ Quick Demo: Auto-fill Remaining]' : '[⚡ 테스트용: 남은 칸 한번에 채우기]'}
             </button>
           </div>
         </div>
@@ -232,7 +256,9 @@ export const BucketInputStep: React.FC<BucketInputStepProps> = ({
               isHanji ? 'text-[#736a5c]' : 'text-neutral-400'
             }`}
           >
-            작성 완료된 소망 목록 ({bucketList.length} / {targetCount})
+            {isEn
+              ? `Recorded Wishes (${bucketList.length} / ${targetCount})`
+              : `작성 완료된 소망 목록 (${bucketList.length} / ${targetCount})`}
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {bucketList.map((item) => (
@@ -256,7 +282,9 @@ export const BucketInputStep: React.FC<BucketInputStepProps> = ({
                       : 'text-amber-500 animate-pulse'
                   }`}
                 >
-                  {item.status === 'ready' ? '● 준비됨' : '○ 분석중'}
+                  {item.status === 'ready'
+                    ? isEn ? '● Ready' : '● 준비됨'
+                    : isEn ? '○ Analyzing' : '○ 분석중'}
                 </span>
               </div>
             ))}

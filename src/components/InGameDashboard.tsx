@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BucketItem, ColorTheme } from '../types/game';
+import { BucketItem, ColorTheme, Language } from '../types/game';
 import { Sparkles, Send, ArrowRight, Heart, DollarSign } from 'lucide-react';
 
 interface InGameDashboardProps {
@@ -8,6 +8,7 @@ interface InGameDashboardProps {
   months: number;
   historyCount: number;
   colorTheme: ColorTheme;
+  lang: Language;
   onSelectItem: (id: number) => void;
   onCustomAction: (text: string) => void;
   onTriggerEnding: () => void;
@@ -19,6 +20,7 @@ export const InGameDashboard: React.FC<InGameDashboardProps> = ({
   months,
   historyCount,
   colorTheme,
+  lang,
   onSelectItem,
   onCustomAction,
   onTriggerEnding
@@ -27,6 +29,7 @@ export const InGameDashboard: React.FC<InGameDashboardProps> = ({
   const [isSubmittingCustom, setIsSubmittingCustom] = useState(false);
 
   const isHanji = colorTheme === 'hanji';
+  const isEn = lang === 'en';
   const unchosenItems = bucketList.filter((item) => !item.selected);
 
   const handleCustomSubmit = (e?: React.FormEvent) => {
@@ -57,7 +60,7 @@ export const InGameDashboard: React.FC<InGameDashboardProps> = ({
             }`}
           >
             <Heart className={`w-3.5 h-3.5 ${isHanji ? 'text-[#b83a2b]' : 'text-rose-400'}`} />
-            <span>남은 기대 수명</span>
+            <span>{isEn ? 'Remaining Lifespan' : '남은 기대 수명'}</span>
           </div>
           <div
             className={`text-3xl md:text-4xl font-bold font-serif-kr flex items-baseline gap-1.5 ${
@@ -70,7 +73,7 @@ export const InGameDashboard: React.FC<InGameDashboardProps> = ({
                 isHanji ? 'text-[#736a5c]' : 'text-neutral-400'
               }`}
             >
-              개월
+              {isEn ? 'months' : '개월'}
             </span>
           </div>
         </div>
@@ -82,7 +85,7 @@ export const InGameDashboard: React.FC<InGameDashboardProps> = ({
             }`}
           >
             <DollarSign className={`w-3.5 h-3.5 ${isHanji ? 'text-[#3b5a4a]' : 'text-emerald-400'}`} />
-            <span>사용 가능 예산</span>
+            <span>{isEn ? 'Available Budget' : '사용 가능 예산'}</span>
           </div>
           <div
             className={`text-3xl md:text-4xl font-bold font-serif-kr flex items-baseline gap-1 ${
@@ -109,7 +112,9 @@ export const InGameDashboard: React.FC<InGameDashboardProps> = ({
               isHanji ? 'text-[#736a5c]' : 'text-neutral-400'
             }`}
           >
-            당신의 버킷리스트 (선택 전에는 비용과 수명을 알 수 없습니다)
+            {isEn
+              ? 'Your Bucket List (Cost & lifespan effect remain hidden until chosen)'
+              : '당신의 버킷리스트 (선택 전에는 비용과 수명을 알 수 없습니다)'}
           </div>
           <p
             className={`text-sm font-serif-kr leading-relaxed ${
@@ -117,7 +122,11 @@ export const InGameDashboard: React.FC<InGameDashboardProps> = ({
             }`}
           >
             {historyCount === 0
-              ? '6개월의 시한부 판정 앞에서, 당신의 심장이 가장 먼저 향하는 소망은 무엇입니까?'
+              ? isEn
+                ? 'Facing a six-month horizon, which wish does your heart reach for first?'
+                : '6개월의 시한부 판정 앞에서, 당신의 심장이 가장 먼저 향하는 소망은 무엇입니까?'
+              : isEn
+              ? `You have fulfilled ${historyCount} wish(es) so far. With your remaining budget and time, what will you choose next?`
               : `지금까지 ${historyCount}개의 소망을 마주했습니다. 남은 예산과 시간 속에서 다음으로 무엇을 하시겠습니까?`}
           </p>
         </div>
@@ -157,7 +166,7 @@ export const InGameDashboard: React.FC<InGameDashboardProps> = ({
                     : 'bg-neutral-900 group-hover:bg-white text-neutral-300 group-hover:text-black border-neutral-700 group-hover:border-white'
                 }`}
               >
-                <span>선택</span>
+                <span>{isEn ? 'Choose' : '선택'}</span>
                 <ArrowRight className="w-3 h-3" />
               </span>
             </button>
@@ -176,14 +185,22 @@ export const InGameDashboard: React.FC<InGameDashboardProps> = ({
             }`}
           >
             <Sparkles className={`w-3 h-3 ${isHanji ? 'text-[#b83a2b]' : 'text-amber-300'}`} />
-            <span>Other Option: 목록 외에 지금 당장 하고 싶은 다른 행동 직접 적기</span>
+            <span>
+              {isEn
+                ? 'Other Option: Write a spontaneous action outside your list right now'
+                : 'Other Option: 목록 외에 지금 당장 하고 싶은 다른 행동 직접 적기'}
+            </span>
           </div>
           <form onSubmit={handleCustomSubmit} className="flex gap-2">
             <input
               type="text"
               value={customInput}
               onChange={(e) => setCustomInput(e.target.value)}
-              placeholder="예: 바닷가 작은 오두막에서 보름간 혼자 머물기..."
+              placeholder={
+                isEn
+                  ? 'e.g., Spend two quiet weeks alone in a small cottage by the sea...'
+                  : '예: 바닷가 작은 오두막에서 보름간 혼자 머물기...'
+              }
               className={`flex-1 border rounded-xl px-4 py-2.5 text-sm transition focus:outline-none ${
                 isHanji
                   ? 'bg-[#faf8f2] border-[#cfc6b2] text-[#1c1a18] placeholder:text-[#999081] focus:border-[#1c1a18]'
@@ -199,7 +216,7 @@ export const InGameDashboard: React.FC<InGameDashboardProps> = ({
                   : 'bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border-neutral-700 hover:border-neutral-500'
               }`}
             >
-              <span>직접 실행</span>
+              <span>{isEn ? 'Act Now' : '직접 실행'}</span>
               <Send className="w-3 h-3" />
             </button>
           </form>
@@ -217,7 +234,9 @@ export const InGameDashboard: React.FC<InGameDashboardProps> = ({
                 : 'text-neutral-400 hover:text-white'
             }`}
           >
-            남은 예산($ {budget.toLocaleString()})을 간직한 채 여기서 여정 마무리하기 (엔딩 보기) →
+            {isEn
+              ? `Conclude your journey here while keeping the remaining $${budget.toLocaleString()} (View Ending) →`
+              : `남은 예산($ ${budget.toLocaleString()})을 간직한 채 여기서 여정 마무리하기 (엔딩 보기) →`}
           </button>
         </div>
       )}

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { ColorTheme } from '../types/game';
+import { ColorTheme, Language } from '../types/game';
 import { ArrowRight, ArrowLeft } from 'lucide-react';
 
 interface StoryBridgeStepProps {
   colorTheme: ColorTheme;
+  lang: Language;
   onComplete: () => void;
 }
 
@@ -15,7 +16,7 @@ interface ChapterSlide {
   btnText: string;
 }
 
-const CHAPTER_SLIDES: ChapterSlide[] = [
+const CHAPTER_SLIDES_KO: ChapterSlide[] = [
   {
     tag: "Chapter I. 멈춰버린 시계",
     seal: "선고",
@@ -48,14 +49,48 @@ const CHAPTER_SLIDES: ChapterSlide[] = [
   }
 ];
 
-export const StoryBridgeStep: React.FC<StoryBridgeStepProps> = ({ colorTheme, onComplete }) => {
+const CHAPTER_SLIDES_EN: ChapterSlide[] = [
+  {
+    tag: "Chapter I. The Stopped Clock",
+    seal: "Diagnosis",
+    headline: "“You have about six months left to live.”",
+    paragraphs: [
+      "Breaking the cold silence of the clinic, the doctor's voice was strangely calm. Outside the window, ordinary sunlight poured down as if nothing had happened at all.",
+      "Countless tomorrows you had endlessly postponed to the back of your calendar—telling yourself 'just after this project' or 'once life gets a little easier'—came to a permanent halt before a single sentence."
+    ],
+    btnText: "Next →"
+  },
+  {
+    tag: "Chapter II. Laying Down the Weight",
+    seal: "Release",
+    headline: "After settling your affairs, one budget remains: USD 100,000.",
+    paragraphs: [
+      "On the way home from the hospital, you began laying down the daily obligations and expectations of others that had bound you for so long.",
+      "After settling everything, the total available budget left in your account is USD 100,000. That number, fiercely saved against future anxieties, now exists solely for your remaining six months."
+    ],
+    btnText: "Next →"
+  },
+  {
+    tag: "Chapter III. Facing Your Genuine Self",
+    seal: "True Heart",
+    headline: "In these six months, what is it that you truly wish to do?",
+    paragraphs: [
+      "We still stand within the real constraint of a finite budget. Yet at the same time, the vitality that blooms when you pour your whole heart into what you genuinely love can miraculously extend your time.",
+      "Among the 10 wishes you just wrote down, take your very first step toward the place your heart points to first."
+    ],
+    btnText: "Begin My Journey →"
+  }
+];
+
+export const StoryBridgeStep: React.FC<StoryBridgeStepProps> = ({ colorTheme, lang, onComplete }) => {
   const [slideIndex, setSlideIndex] = useState(0);
 
   const isHanji = colorTheme === 'hanji';
-  const currentSlide = CHAPTER_SLIDES[slideIndex];
+  const slides = lang === 'en' ? CHAPTER_SLIDES_EN : CHAPTER_SLIDES_KO;
+  const currentSlide = slides[slideIndex];
 
   const handleNext = () => {
-    if (slideIndex < CHAPTER_SLIDES.length - 1) {
+    if (slideIndex < slides.length - 1) {
       setSlideIndex(slideIndex + 1);
     } else {
       onComplete();
@@ -86,7 +121,7 @@ export const StoryBridgeStep: React.FC<StoryBridgeStepProps> = ({ colorTheme, on
           <div className="flex items-center gap-2">
             <span>{currentSlide.tag}</span>
           </div>
-          <span className="font-mono">{slideIndex + 1} / {CHAPTER_SLIDES.length}</span>
+          <span className="font-mono">{slideIndex + 1} / {slides.length}</span>
         </div>
         <div className={`w-16 h-0.5 ${isHanji ? 'bg-[#b83a2b]' : 'bg-white/70'}`} />
       </div>
@@ -119,7 +154,7 @@ export const StoryBridgeStep: React.FC<StoryBridgeStepProps> = ({ colorTheme, on
         }`}
       >
         <div className="flex gap-2">
-          {CHAPTER_SLIDES.map((_, i) => (
+          {slides.map((_, i) => (
             <span
               key={i}
               className={`h-1.5 rounded-full transition-all duration-300 ${

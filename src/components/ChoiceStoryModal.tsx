@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BucketItem, ColorTheme } from '../types/game';
+import { BucketItem, ColorTheme, Language } from '../types/game';
 import { ArrowRight, ArrowLeft, Sparkles, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface ChoiceStoryModalProps {
@@ -8,6 +8,7 @@ interface ChoiceStoryModalProps {
   currentMonths: number;
   isGameOver: boolean;
   colorTheme: ColorTheme;
+  lang: Language;
   onContinue: () => void;
 }
 
@@ -17,12 +18,14 @@ export const ChoiceStoryModal: React.FC<ChoiceStoryModalProps> = ({
   currentMonths,
   isGameOver,
   colorTheme,
+  lang,
   onContinue
 }) => {
   const [currentPage, setCurrentPage] = useState<'story' | 'result'>('story');
   const [showBreakdown, setShowBreakdown] = useState(false);
 
   const isHanji = colorTheme === 'hanji';
+  const isEn = lang === 'en';
   const actualCost = item.actualCost ?? item.cost;
   const paragraphs = (item.story || '').split('\n\n').filter(Boolean);
 
@@ -57,7 +60,7 @@ export const ChoiceStoryModal: React.FC<ChoiceStoryModalProps> = ({
                 : 'bg-neutral-800 text-neutral-400'
             }`}
           >
-            1. 이야기
+            {isEn ? '1. Story' : '1. 이야기'}
           </span>
           <span className="text-neutral-400">/</span>
           <span
@@ -71,7 +74,7 @@ export const ChoiceStoryModal: React.FC<ChoiceStoryModalProps> = ({
                 : 'bg-neutral-800 text-neutral-400'
             }`}
           >
-            2. 결과와 소요
+            {isEn ? '2. Outcome & Cost' : '2. 결과와 소요'}
           </span>
         </div>
       </div>
@@ -99,7 +102,9 @@ export const ChoiceStoryModal: React.FC<ChoiceStoryModalProps> = ({
               paragraphs.map((p, idx) => <p key={idx}>{p}</p>)
             ) : (
               <p className="italic text-sm opacity-70">
-                선택한 소망을 이루기 위해 온 마음을 쏟아 소중한 시간과 일상을 채워나갔습니다.
+                {isEn
+                  ? 'You poured your whole heart into fulfilling this wish, filling your days with irreplaceable meaning.'
+                  : '선택한 소망을 이루기 위해 온 마음을 쏟아 소중한 시간과 일상을 채워나갔습니다.'}
               </p>
             )}
           </div>
@@ -113,39 +118,43 @@ export const ChoiceStoryModal: React.FC<ChoiceStoryModalProps> = ({
                   : 'bg-white hover:bg-neutral-200 text-black'
               }`}
             >
-              <span>다음 (소요 및 결과 확인)</span>
+              <span>{isEn ? 'Next (View Outcome & Cost)' : '다음 (소요 및 결과 확인)'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         </div>
       )}
 
-      {/* PAGE 2: Clean Explanation without the square badges */}
+      {/* PAGE 2: Clean Explanation */}
       {currentPage === 'result' && (
         <div className="space-y-6 animate-in fade-in duration-300">
           {/* Subtle category or context tag */}
           <div className="flex items-center gap-2">
             <BookOpen className={`w-4 h-4 ${isHanji ? 'text-[#b83a2b]' : 'text-amber-400'}`} />
             <span className={`text-xs font-semibold ${isHanji ? 'text-[#736a5c]' : 'text-neutral-400'}`}>
-              선택의 결과와 내면의 변화
+              {isEn ? 'Outcome of Your Choice & Inner Change' : '선택의 결과와 내면의 변화'}
             </span>
           </div>
 
-          {/* Clean Description Only (네모박스 빼고 아래 설명만 배치) */}
+          {/* Clean Description Only */}
           <div
             className={`text-sm md:text-base leading-relaxed font-sans space-y-2 py-4 border-y ${
               isHanji ? 'text-[#2e2a25] border-[#ded7c5]' : 'text-neutral-200 border-neutral-800'
             }`}
           >
             <p className={`font-medium ${isHanji ? 'text-[#1c1a18]' : 'text-white'}`}>
-              ▶ [{item.text}] {item.daysSpent}일을 진행하면서 비용 ${actualCost.toLocaleString()}를 사용했으며, 수명이 {item.lifespanDelta}개월 증가했습니다.
+              {isEn
+                ? `▶ Spending ${item.daysSpent} days on [${item.text}] used $${actualCost.toLocaleString()} of your budget and extended your life by +${item.lifespanDelta} months.`
+                : `▶ [${item.text}] ${item.daysSpent}일을 진행하면서 비용 ${actualCost.toLocaleString()}를 사용했으며, 수명이 ${item.lifespanDelta}개월 증가했습니다.`}
             </p>
             <p className={`text-xs md:text-sm font-sans pt-1 ${isHanji ? 'text-[#736a5c]' : 'text-neutral-400'}`}>
-              (남은 예산: ${remainingBudget.toLocaleString()} / 현재 기대 수명: {currentMonths.toFixed(1)}개월)
+              {isEn
+                ? `(Remaining Budget: $${remainingBudget.toLocaleString()} / Current Lifespan: ${currentMonths.toFixed(1)} months)`
+                : `(남은 예산: $${remainingBudget.toLocaleString()} / 현재 기대 수명: ${currentMonths.toFixed(1)}개월)`}
             </p>
           </div>
 
-          {/* Optional System Pricing Breakdown Accordion (제작자/사용자 궁금증 해소) */}
+          {/* Optional System Pricing Breakdown Accordion */}
           {(item.costBreakdown || item.rationale) && (
             <div
               className={`rounded-xl border transition ${
@@ -161,7 +170,11 @@ export const ChoiceStoryModal: React.FC<ChoiceStoryModalProps> = ({
                   isHanji ? 'text-[#5c5446] hover:text-[#1c1a18]' : 'text-neutral-400 hover:text-white'
                 }`}
               >
-                <span>💡 왜 이 비용과 기간이 소요되었을까요? (시스템 산정 근거)</span>
+                <span>
+                  {isEn
+                    ? '💡 Why did it take this cost and duration? (Realistic System Rationale)'
+                    : '💡 왜 이 비용과 기간이 소요되었을까요? (시스템 산정 근거)'}
+                </span>
                 {showBreakdown ? (
                   <ChevronUp className="w-4 h-4" />
                 ) : (
@@ -177,13 +190,17 @@ export const ChoiceStoryModal: React.FC<ChoiceStoryModalProps> = ({
                 >
                   {item.costBreakdown && (
                     <div>
-                      <span className="font-semibold text-neutral-500 mr-1.5">세부 내역:</span>
+                      <span className="font-semibold text-neutral-500 mr-1.5">
+                        {isEn ? 'Breakdown:' : '세부 내역:'}
+                      </span>
                       <span>{item.costBreakdown}</span>
                     </div>
                   )}
                   {item.rationale && (
                     <div className="text-[11px] opacity-80">
-                      <span className="font-semibold text-neutral-500 mr-1.5">현실적 판단 근거:</span>
+                      <span className="font-semibold text-neutral-500 mr-1.5">
+                        {isEn ? 'Rationale:' : '현실적 판단 근거:'}
+                      </span>
                       <span>{item.rationale}</span>
                     </div>
                   )}
@@ -203,7 +220,7 @@ export const ChoiceStoryModal: React.FC<ChoiceStoryModalProps> = ({
               }`}
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>이야기 다시 읽기</span>
+              <span>{isEn ? 'Read Story Again' : '이야기 다시 읽기'}</span>
             </button>
 
             <button
@@ -220,7 +237,11 @@ export const ChoiceStoryModal: React.FC<ChoiceStoryModalProps> = ({
             >
               <span>
                 {isGameOver
-                  ? '모든 예산을 사용했습니다. 마지막 회고록 마주하기 →'
+                  ? isEn
+                    ? 'All budget spent. Face your final chronicle →'
+                    : '모든 예산을 사용했습니다. 마지막 회고록 마주하기 →'
+                  : isEn
+                  ? `Continue with $${remainingBudget.toLocaleString()} remaining →`
                   : `남은 예산 $${remainingBudget.toLocaleString()}로 다음 선택 마주하기 →`}
               </span>
               <ArrowRight className="w-4 h-4" />

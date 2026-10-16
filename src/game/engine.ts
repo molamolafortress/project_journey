@@ -1,11 +1,71 @@
-import { BucketItem, PlayerProfile, EndingSlide, RefinementSuggestion } from '../types/game';
-import { REALISTIC_SEEDS, RealisticItemSeed } from '../data/realisticDb';
+import { BucketItem, PlayerProfile, EndingSlide, RefinementSuggestion, Language } from '../types/game';
+import { REALISTIC_SEEDS, REALISTIC_SEEDS_EN, getRealisticSeeds } from '../data/realisticDb';
 
 /**
  * Checks if a user's raw bucket list input is overly vague and needs refinement.
  */
-export function checkNeedsRefinement(text: string): RefinementSuggestion | null {
+export function checkNeedsRefinement(text: string, lang: Language = 'ko'): RefinementSuggestion | null {
   const trimmed = text.trim();
+  const lower = trimmed.toLowerCase();
+
+  if (lang === 'en') {
+    const vagueKeywordsEn = ['travel', 'trip', 'exercise', 'study', 'music', 'book', 'happiness', 'rest', 'money', 'love', 'art', 'cooking', 'house', 'party'];
+    const isShortEn = trimmed.split(/\s+/).length <= 1 && trimmed.length <= 10;
+    const isKeywordEn = vagueKeywordsEn.includes(lower);
+
+    if (isShortEn || isKeywordEn) {
+      if (lower.includes('travel') || lower.includes('trip')) {
+        return {
+          question: `Shall we shape '${trimmed}' into a more vivid personal journey?`,
+          options: [
+            'Walk 800km along the Camino de Santiago in Spain, focusing entirely on myself',
+            'Sleep under the northern lights in an Iceland campervan for ten nights',
+            'Rent a quiet seaside cabin for a month with the people I love most'
+          ]
+        };
+      }
+      if (lower.includes('music') || lower.includes('song')) {
+        return {
+          question: `What kind of musical moment do you dream of creating with '${trimmed}'?`,
+          options: [
+            'Learn guitar and songwriting to record and release my own acoustic single',
+            'Master a jazz piano piece I have dreamed of playing since childhood',
+            'Experience my favorite artist live from the front row at a concert in London'
+          ]
+        };
+      }
+      if (lower.includes('book') || lower.includes('write')) {
+        return {
+          question: `What dream have you held in your heart regarding '${trimmed}'?`,
+          options: [
+            'Publish an independent essay collection telling the story of my life',
+            'Open a tiny late-night bookstore or book cafe to share stories with people',
+            'Retreat to a quiet forest cabin for a month and read all the books I love'
+          ]
+        };
+      }
+      if (lower.includes('cook') || lower.includes('food') || lower.includes('party')) {
+        return {
+          question: `How and with whom would you love to enjoy '${trimmed}'?`,
+          options: [
+            'Invite 20 cherished friends and host a warm home party with food I cooked myself',
+            'Savor a once-in-a-lifetime dinner at a 3-Michelin-star restaurant just for myself',
+            'Spend a month at a countryside culinary school in France learning classic patisserie'
+          ]
+        };
+      }
+      return {
+        question: `What is the most meaningful vision you hold in your heart for '${trimmed}'?`,
+        options: [
+          `${trimmed} — Create a genuine work of my own to leave behind in the world`,
+          `${trimmed} — Share deep memories and warmth with the people I cherish`,
+          `${trimmed} — Step away from daily noise and immerse myself purely in what I love`
+        ]
+      };
+    }
+    return null;
+  }
+
   const vagueKeywords = ['여행', '세계여행', '운동', '공부', '음악', '책', '행복', '휴식', '돈', '사랑', '그림', '요리', '집'];
 
   const isShort = trimmed.length <= 4;
@@ -68,19 +128,22 @@ export function checkNeedsRefinement(text: string): RefinementSuggestion | null 
 
 /**
  * Estimates realistic cost, days, lifespan delta, and narrative for a bucket list item.
- * Strictly guarantees realistic market costs and reasonable durations (e.g. Home party is ~$1,500/3 days, NOT $30k/45 days).
  */
-export function estimateRealisticBucketItem(text: string, id: number): BucketItem {
+export function estimateRealisticBucketItem(text: string, id: number, lang: Language = 'ko'): BucketItem {
   const trimmed = text.trim();
 
-  // 1. Exact match from predefined realistic seeds
-  const exact = REALISTIC_SEEDS.find(s => s.text === trimmed);
+  // 1. Exact match from predefined realistic seeds (check both languages)
+  const seeds = getRealisticSeeds(lang);
+  const exact = seeds.find(s => s.text === trimmed) || REALISTIC_SEEDS.find(s => s.text === trimmed) || REALISTIC_SEEDS_EN.find(s => s.text === trimmed);
   if (exact) {
     return {
       id,
       text: exact.text,
       category: exact.category,
       cost: exact.cost,
+      costBreakdown: exact.costBreakdown,
+      rationale: exact.rationale,
+      feasibility: 'realistic',
       daysSpent: exact.daysSpent,
       lifespanDelta: exact.lifespanDelta,
       story: exact.story,
@@ -93,8 +156,25 @@ export function estimateRealisticBucketItem(text: string, id: number): BucketIte
   // 2. Keyword heuristic matching for free-form custom input
   const t = trimmed.toLowerCase();
 
-  // Detour 1: Extreme / Military (e.g. 핵미사일, ICBM, 전투기, 무기)
-  if (t.includes('핵') || t.includes('미사일') || t.includes('전투기') || t.includes('무기') || t.includes('잠수함') || t.includes('폭탄')) {
+  // Detour 1: Extreme / Military
+  if (t.includes('핵') || t.includes('미사일') || t.includes('전투기') || t.includes('무기') || t.includes('잠수함') || t.includes('폭탄') || t.includes('nuke') || t.includes('missile') || t.includes('fighter jet') || t.includes('bomb')) {
+    if (lang === 'en') {
+      return {
+        id,
+        text: trimmed,
+        category: 'Extraordinary Experience',
+        cost: 6000,
+        daysSpent: 10,
+        lifespanDelta: 1.5,
+        costBreakdown: 'Desert rocket launch observation tour $2,500 + Decommissioned nuclear silo bunker private tour $1,500 + Desert pyrotechnic simulation & stay $2,000 = Total $6,000',
+        rationale: 'Since purchasing real strategic weapons is impossible, we realized the underlying emotional longing through an experiential detour: observing a desert rocket launch, touring a decommissioned underground missile silo, and experiencing a massive pyrotechnic shockwave to safely sublimate repressed anger and helplessness.',
+        feasibility: 'realistic',
+        story: `Out in the vast desert where red dust swept across the horizon, you stood before the heavy blast doors of a decommissioned Cold War missile silo deep underground. As the earth-shaking roar of a rocket ignition and simulated detonation struck your chest, the helplessness and anger locked deep inside scattered into the desert wind.\n\nYou realized the true reason you wanted to shatter the world was the helplessness of facing mortality. In the vast silence that followed the roar, you finally laid down the weight pressing on your heart and found peace.`,
+        chronicle: `A heart that once longed for overwhelming destructive force found true peace in the vast silence of the desert.\nHaving burned away all repressed anger in the earth-shaking roar, you greeted your remaining days with a clear soul.`,
+        status: 'ready',
+        selected: false
+      };
+    }
     return {
       id,
       text: trimmed,
@@ -112,8 +192,25 @@ export function estimateRealisticBucketItem(text: string, id: number): BucketIte
     };
   }
 
-  // Detour 2: Omnipotence / Godlike / Invincibility (e.g. 전지전능, 신, 불로불사)
-  if (t.includes('전지전능') || t.includes('신이') || t.includes('불로불사') || t.includes('영생')) {
+  // Detour 2: Omnipotence / Godlike / Invincibility
+  if (t.includes('전지전능') || t.includes('신이') || t.includes('불로불사') || t.includes('영생') || t.includes('omnipoten') || t.includes('immortal') || t.includes('become god')) {
+    if (lang === 'en') {
+      return {
+        id,
+        text: trimmed,
+        category: 'Mind & Inner Peace',
+        cost: 2500,
+        daysSpent: 14,
+        lifespanDelta: 1.8,
+        costBreakdown: 'Sleep clinic biofeedback & brainwave training $1,200 + 2-week intensive lucid dreaming mastery $800 + Restorative retreat $500 = Total $2,500',
+        rationale: 'To fulfill the longing to transcend physical limits and command reality, this experiential detour uses specialized sleep-clinic lucid dreaming training so you can experience complete omnipotence in your dreams every night.',
+        feasibility: 'realistic',
+        story: `You entered a specialized sleep clinic to train your brainwaves and awaken consciousness within your dreams. On the tenth night, when you stretched out your hand inside the dream, gravity vanished and the Milky Way unfolded beneath your feet, granting you complete freedom to shape an entire universe at will.\n\nWhen you opened your eyes in the morning, you realized that true omnipotence is not ruling the outer world, but becoming the serene master of your own mind.`,
+        chronicle: `Beyond the boundary of sleep, you spent nights of omnipotence commanding the universe within your heart.\nThe inner freedom that transcended physical limits filled your remaining life with unshakable serenity.`,
+        status: 'ready',
+        selected: false
+      };
+    }
     return {
       id,
       text: trimmed,
@@ -131,8 +228,25 @@ export function estimateRealisticBucketItem(text: string, id: number): BucketIte
     };
   }
 
-  // Detour 3: Superpower / Magic / Elsa (e.g. 초능력, 엘사, 마법, 얼음)
-  if (t.includes('초능력') || t.includes('엘사') || t.includes('마법') || t.includes('빙결')) {
+  // Detour 3: Superpower / Magic / Elsa
+  if (t.includes('초능력') || t.includes('엘사') || t.includes('마법') || t.includes('빙결') || t.includes('superpower') || t.includes('elsa') || t.includes('magic')) {
+    if (lang === 'en') {
+      return {
+        id,
+        text: trimmed,
+        category: 'Extraordinary Experience',
+        cost: 4500,
+        daysSpent: 8,
+        lifespanDelta: 1.7,
+        costBreakdown: 'Hokkaido Ice Hotel 3-night private booking $1,800 + Special effects studio liquid nitrogen & lighting setup $1,500 + Flights & winter gear $1,200 = Total $4,500',
+        rationale: 'To honor the pure childlike wonder of wielding magic, we staged an unforgettable real-life spectacle at an ice palace with professional special-effects artists, blooming frost crystals at the wave of your fingertips.',
+        feasibility: 'realistic',
+        story: `Inside a snow-white ice palace at minus 15 degrees Celsius, a special-effects team set up liquid nitrogen mist and shimmering aurora lights. The moment you swept your hand through the air and crystalline ice roses bloomed amidst silver frost, you laughed out loud like a child.\n\nYou felt in your heart that the miracle you had longed for since childhood was not magic itself, but the version of you whose eyes sparkled with pure wonder.`,
+        chronicle: `In a snow-white palace of ice, you summoned the magical moment of your childhood dreams into reality.\nThe crystals of wonder that bloomed at your fingertipscolored cold reality with the warm light of a fairy tale.`,
+        status: 'ready',
+        selected: false
+      };
+    }
     return {
       id,
       text: trimmed,
@@ -150,8 +264,25 @@ export function estimateRealisticBucketItem(text: string, id: number): BucketIte
     };
   }
 
-  // Detour 4: Time Travel / Past (e.g. 시간 여행, 타임머신, 과거로)
-  if (t.includes('시간') && (t.includes('여행') || t.includes('과거') || t.includes('타임머신') || t.includes('되돌리'))) {
+  // Detour 4: Time Travel / Past
+  if ((t.includes('시간') && (t.includes('여행') || t.includes('과거') || t.includes('타임머신') || t.includes('되돌리'))) || t.includes('time travel') || t.includes('time machine')) {
+    if (lang === 'en') {
+      return {
+        id,
+        text: trimmed,
+        category: 'Mind & Inner Peace',
+        cost: 1500,
+        daysSpent: 7,
+        lifespanDelta: 1.6,
+        costBreakdown: 'Childhood neighborhood visit & retro studio rental $500 + Digital restoration of old film photos & VHS tapes $400 + Recreating childhood meals & keepsakes $600 = Total $1,500',
+        rationale: 'Since physical time travel is impossible, this memory-restoration project recreates your childhood neighborhood, restores old tapes and photographs, and lets you reconcile in heart with your younger self.',
+        feasibility: 'realistic',
+        story: `You walked the old alleyways where you once lived and restored faded cassette tapes and black-and-white photographs. Standing beneath the same sunset light as all those years ago, you quietly embraced your clumsy, hurting younger self.\n\nThough time cannot be turned back, you affirmed that every passing moment was a precious piece that made you who you are, finally making peace with the past.`,
+        chronicle: `Walking the alleys of bygone time once more, you shared a deep reconciliation with your younger self.\nCarrying the warmth of those memories, your steps made the remainder of your journey firmer and more peaceful.`,
+        status: 'ready',
+        selected: false
+      };
+    }
     return {
       id,
       text: trimmed,
@@ -169,7 +300,26 @@ export function estimateRealisticBucketItem(text: string, id: number): BucketIte
     };
   }
 
-  // USA Travel / New York / America ($6k, 14 days)
+  // Default balanced item (English vs Korean)
+  if (lang === 'en') {
+    return {
+      id,
+      text: trimmed,
+      category: 'Self-Fulfillment & Growth',
+      cost: 3200,
+      daysSpent: 21,
+      lifespanDelta: 1.3,
+      costBreakdown: 'Dedicated equipment, lessons & preparation $1,800 + 3 weeks of living & activity expenses $1,400 = Total $3,200',
+      rationale: 'Realistic 3-week budget required to immerse yourself wholeheartedly in a long-postponed personal wish or craft.',
+      feasibility: 'realistic',
+      story: `You finally turned "${trimmed}"—something you had always put off for "someday when life gets quieter"—into reality.\n\nImmersed for three weeks in a moment you truly wished for, you tasted the deep, unmistakable joy of feeling fully alive.`,
+      chronicle: `For 21 days, you faced a long-postponed wish and claimed time that belonged wholly to you.\nThose moments of listening closely to your inner voice added precious vitality to your life.`,
+      status: 'ready',
+      selected: false
+    };
+  }
+
+  // Korean keyword heuristics
   if (t.includes('미국') || t.includes('뉴욕') || t.includes('하와이') || t.includes('샌프란시스코')) {
     return {
       id,
@@ -188,7 +338,6 @@ export function estimateRealisticBucketItem(text: string, id: number): BucketIte
     };
   }
 
-  // Party / Gathering / Cooking
   if (t.includes('파티') || t.includes('초대') || t.includes('홈파티') || t.includes('요리')) {
     return {
       id,
@@ -207,7 +356,6 @@ export function estimateRealisticBucketItem(text: string, id: number): BucketIte
     };
   }
 
-  // Friendship / Reconciliation / Family
   if (t.includes('화해') || t.includes('친구') || t.includes('부모') || t.includes('가족') || t.includes('사랑')) {
     return {
       id,
@@ -226,7 +374,6 @@ export function estimateRealisticBucketItem(text: string, id: number): BucketIte
     };
   }
 
-  // Major Project: Opening Cafe, Bookstore, Rural house ($35k, 60 days)
   if (t.includes('책방') || t.includes('서점') || t.includes('북카페') || t.includes('카페') || t.includes('시골집') || t.includes('공방') || t.includes('개조')) {
     return {
       id,
@@ -245,7 +392,6 @@ export function estimateRealisticBucketItem(text: string, id: number): BucketIte
     };
   }
 
-  // Writing / Publishing / Book
   if (t.includes('출판') || t.includes('책') || t.includes('에세이') || t.includes('글쓰기') || t.includes('소설')) {
     return {
       id,
@@ -264,7 +410,6 @@ export function estimateRealisticBucketItem(text: string, id: number): BucketIte
     };
   }
 
-  // Philanthropy / Scholarship / Big Donation ($25k)
   if (t.includes('장학') || t.includes('재단') || t.includes('기부') || t.includes('후원') || t.includes('보호소')) {
     return {
       id,
@@ -283,7 +428,6 @@ export function estimateRealisticBucketItem(text: string, id: number): BucketIte
     };
   }
 
-  // Travel / Nature / Retreat ($6.5k, 20 days)
   if (t.includes('여행') || t.includes('오로라') || t.includes('순례') || t.includes('바다') || t.includes('숲')) {
     return {
       id,
@@ -302,7 +446,6 @@ export function estimateRealisticBucketItem(text: string, id: number): BucketIte
     };
   }
 
-  // Default balanced item
   return {
     id,
     text: trimmed,
@@ -323,14 +466,45 @@ export function estimateRealisticBucketItem(text: string, id: number): BucketIte
 /**
  * Generates the "Argon Profile" (Genuine Self Profile) based on the 10 bucket list items.
  */
-export function generateArgonProfile(items: BucketItem[]): PlayerProfile {
+export function generateArgonProfile(items: BucketItem[], lang: Language = 'ko'): PlayerProfile {
   const categoriesCount: Record<string, number> = {};
   items.forEach(i => {
-    const cat = i.category || '창조적 성취';
+    const cat = i.category || (lang === 'en' ? 'Creative Achievement' : '창조적 성취');
     categoriesCount[cat] = (categoriesCount[cat] || 0) + 1;
   });
 
-  const topCategory = Object.entries(categoriesCount).sort((a, b) => b[1] - a[1])[0]?.[0] || '자기표현과 유대';
+  const topCategory = Object.entries(categoriesCount).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+
+  if (lang === 'en') {
+    let coreValue = 'A life lived at your own rhythm and genuine connection';
+    let summary = 'The bucket list you wrote points away from the speed and efficiency demanded by the world, revealing a deep longing to leave behind your own authentic trace and warm human connection.';
+    let repressedDesires = 'Because of busy daily obligations and the expectations of others, you have long postponed the time to express yourself freely and sit deeply with the people who matter most.';
+
+    if (topCategory.includes('Relationship') || topCategory === '관계와 사랑') {
+      coreValue = 'Deep human bonds and love where hearts truly meet';
+      summary = 'Your deepest inner self reaches not for grand wealth or status, but for a warm table of reconciliation and shared laughter with the people you cherish.';
+      repressedDesires = 'Even expressing your sincerest feelings to those closest to you was put off amidst busyness, yet people were always what mattered most to you.';
+    } else if (topCategory.includes('Creation') || topCategory === '창작과 예술') {
+      coreValue = 'Creation that leaves a one-of-a-kind trace in the world';
+      summary = 'You carry the soul of a creator who longs to shape lingering inspirations and inner voices into art, proving that you truly lived and felt.';
+      repressedDesires = 'Though practical burdens forced you to set aside your artistic impulses, your passion to create never faded.';
+    } else if (topCategory.includes('Giving') || topCategory === '기여와 나눔') {
+      coreValue = 'Noble generosity that leaves a warm light for others';
+      summary = 'You find your deepest fulfillment not in personal comfort, but in wiping away the tears of others and planting a meaningful legacy in the world.';
+      repressedDesires = 'Even before the limit of finite time, you willingly reached out your hand to brighten someone else’s tomorrow.';
+    } else if (topCategory.includes('Lifestyle') || topCategory.includes('Adventure') || topCategory === '라이프스타일' || topCategory === '모험과 자연') {
+      coreValue = 'Complete freedom and serenity liberated from others’ standards';
+      summary = 'You have longed to step away from endless competition and noise, surrendering to the rhythm of nature and dwelling quietly at your own pace.';
+      repressedDesires = 'Beneath the world’s pressure to possess more, you paradoxically yearned for the simplest, purest freedom.';
+    }
+
+    return {
+      status: 'ready',
+      coreValue,
+      summary,
+      repressedDesires
+    };
+  }
 
   let coreValue = '나만의 호흡으로 채우는 삶과 진실한 관계';
   let summary = '당신이 적어 내려간 버킷리스트는 세상이 요구하는 효율과 속도에서 벗어나, 온전히 나만의 흔적과 따뜻한 온기를 남기고자 하는 깊은 소망을 가리키고 있습니다.';

@@ -5,12 +5,13 @@ import {
   GamePhase,
   SoundPreset,
   EndingSlide,
-  ColorTheme
+  ColorTheme,
+  Language
 } from './types/game';
-import { REALISTIC_SEEDS } from './data/realisticDb';
-import { compileEndingSlides } from './game/engine';
+import { REALISTIC_SEEDS, REALISTIC_SEEDS_EN, getRealisticSeeds } from './data/realisticDb';
+import { compileEndingSlides, generateArgonProfile } from './game/engine';
 import { soundEngine } from './services/soundEngine';
-import { Volume2, VolumeX, Palette, FileSearch } from 'lucide-react';
+import { Volume2, VolumeX, Palette, FileSearch, Globe } from 'lucide-react';
 import { BucketInputStep } from './components/BucketInputStep';
 import { StoryBridgeStep } from './components/StoryBridgeStep';
 import { InGameDashboard } from './components/InGameDashboard';
@@ -22,6 +23,15 @@ export default function App() {
   const TARGET_COUNT = 10;
   const INITIAL_BUDGET = 100000;
   const INITIAL_MONTHS = 6.0;
+
+  // Language: Korean ('ko') or English ('en')
+  const [lang, setLang] = useState<Language>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('lang') === 'en') return 'en';
+    }
+    return 'ko';
+  });
 
   // Color Theme: Hanji (Default) or Black
   const [colorTheme, setColorTheme] = useState<ColorTheme>('hanji');
@@ -45,8 +55,8 @@ export default function App() {
 
   // Sound & Worker states
   const [soundPreset, setSoundPreset] = useState<SoundPreset>('frostcello');
-  const [isBgWorking, setIsBgWorking] = useState<boolean>(false);
-  const [bgLogMessage, setBgLogMessage] = useState<string>(
+  const [, setIsBgWorking] = useState<boolean>(false);
+  const [, setBgLogMessage] = useState<string>(
     '[System] Gemini Flash 실시간 백그라운드 추론 준비 완료. 10개의 소망 입력을 시작합니다.'
   );
 
@@ -73,16 +83,61 @@ export default function App() {
     setBgLogMessage(`[${time}] ${msg}`);
   }, []);
 
+  // Translate seed item helper when switching language mid-session
+  const translateBucketItem = useCallback((item: BucketItem, targetLang: Language): BucketItem => {
+    const koIdx = REALISTIC_SEEDS.findIndex((s) => s.text === item.text);
+    const enIdx = REALISTIC_SEEDS_EN.findIndex((s) => s.text === item.text);
+    const seedIdx = koIdx !== -1 ? koIdx : enIdx;
+    if (seedIdx !== -1) {
+      const targetSeed = targetLang === 'en' ? REALISTIC_SEEDS_EN[seedIdx] : REALISTIC_SEEDS[seedIdx];
+      if (targetSeed) {
+        return {
+          ...item,
+          text: targetSeed.text,
+          category: targetSeed.category,
+          costBreakdown: targetSeed.costBreakdown,
+          rationale: targetSeed.rationale,
+          story: targetSeed.story,
+          chronicle: targetSeed.chronicle
+        };
+      }
+    }
+    return item;
+  }, []);
+
+  // Toggle Language between KO and EN seamlessly
+  const handleToggleLang = useCallback(() => {
+    const nextLang: Language = lang === 'ko' ? 'en' : 'ko';
+    setLang(nextLang);
+
+    setBucketList((prev) => {
+      const nextList = prev.map((item) => translateBucketItem(item, nextLang));
+      if (nextList.length > 0) {
+        const nextProfile = generateArgonProfile(nextList, nextLang);
+        setProfile((p) => ({
+          ...p,
+          coreValue: nextProfile.coreValue,
+          summary: nextProfile.summary,
+          repressedDesires: nextProfile.repressedDesires
+        }));
+      }
+      return nextList;
+    });
+
+    setHistory((prev) => prev.map((item) => translateBucketItem(item, nextLang)));
+    setActiveStoryItem((prev) => (prev ? translateBucketItem(prev, nextLang) : null));
+  }, [lang, translateBucketItem]);
+
   // Background Worker: Gemini Flash inference via /api/gemini/analyze
   const analyzeBucketItemInBackground = useCallback(
-    async (item: BucketItem) => {
-      logWorker(`⚙️ [Gemini Flash] #${item.id} "${item.text.slice(0, 15)}..." 현실 물가/소요일/수명 실시간 추론 중...`, true);
+    async (item: BucketItem, currentLang: Language) => {
+      logWorker(`⚙️ [Gemini Flash] #${item.id} "${item.text.slice(0, 15)}..." analyzing...`, true);
 
       try {
         const res = await fetch('/api/gemini/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: item.text, id: item.id })
+          body: JSON.stringify({ text: item.text, id: item.id, lang: currentLang })
         });
         const data = await res.json();
 
@@ -104,12 +159,12 @@ export default function App() {
               : b
           )
         );
-        logWorker(`✅ [Gemini Flash] #${item.id} "${item.text.slice(0, 10)}..." 비용($${(data.cost ?? item.cost).toLocaleString()}) 및 수명(+${data.lifespanDelta ?? item.lifespanDelta}개월) 추론 완료`, false);
+        logWorker(`✅ [Gemini Flash] #${item.id} complete`, false);
       } catch {
         setBucketList((prev) =>
           prev.map((b) => (b.id === item.id ? { ...b, status: 'ready' } : b))
         );
-        logWorker(`✅ [Gemini Flash] #${item.id} 분석 완료`, false);
+        logWorker(`✅ [Gemini Flash] #${item.id} complete`, false);
       }
     },
     [logWorker]
@@ -117,26 +172,31 @@ export default function App() {
 
   // Background Worker: Argon Genuine Self Profiling via /api/gemini/profile
   const triggerArgonProfiling = useCallback(
-    async (items: BucketItem[]) => {
-      logWorker('🧠 [Gemini Argon] 10개 버킷리스트 기반 진정한 자아(Genuine Self) 프로파일링 시작...', true);
+    async (items: BucketItem[], currentLang: Language) => {
+      const initialFallback = generateArgonProfile(items, currentLang);
+      setProfile({
+        ...initialFallback,
+        status: 'analyzing'
+      });
+      logWorker('🧠 [Gemini 4 Argon] Profiling Genuine Self...', true);
 
       try {
         const res = await fetch('/api/gemini/profile', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items: items.map((i) => i.text) })
+          body: JSON.stringify({ items: items.map((i) => i.text), lang: currentLang })
         });
         const data = await res.json();
         setProfile({
           status: 'ready',
-          coreValue: data.coreValue || '나만의 호흡으로 살아가는 삶과 진실한 관계',
-          summary: data.summary || '당신이 적어 내려간 버킷리스트는 세상의 속도에서 벗어나 온전히 나만의 흔적과 온기를 남기고자 하는 깊은 소망을 가리키고 있습니다.',
-          repressedDesires: data.repressedDesires
+          coreValue: data.coreValue || initialFallback.coreValue,
+          summary: data.summary || initialFallback.summary,
+          repressedDesires: data.repressedDesires || initialFallback.repressedDesires
         });
-        logWorker(`✅ [Gemini Argon] 프로파일링 완료: [${data.coreValue || '진정한 자아'}]`, false);
+        logWorker(`✅ [Gemini 4 Argon] Profiling complete: [${data.coreValue || initialFallback.coreValue}]`, false);
       } catch {
-        setProfile((prev) => ({ ...prev, status: 'ready' }));
-        logWorker('✅ [Gemini Argon] 프로파일링 완료', false);
+        setProfile({ ...initialFallback, status: 'ready' });
+        logWorker('✅ [Gemini 4 Argon] Profiling complete', false);
       }
     },
     [logWorker]
@@ -164,21 +224,22 @@ export default function App() {
       setBucketList(updated);
 
       // Trigger Gemini Flash background analysis
-      analyzeBucketItemInBackground(initialItem);
+      analyzeBucketItemInBackground(initialItem, lang);
 
       // If 10 items reached, transition to narrative bridge
       if (updated.length === TARGET_COUNT) {
-        triggerArgonProfiling(updated);
+        triggerArgonProfiling(updated, lang);
         setPhase('story_bridge');
       }
     },
-    [bucketList, analyzeBucketItemInBackground, triggerArgonProfiling]
+    [bucketList, lang, analyzeBucketItemInBackground, triggerArgonProfiling]
   );
 
   // Quick Auto-fill for testing
   const handleAutoFill = useCallback(() => {
+    const seeds = getRealisticSeeds(lang);
     const existingTexts = bucketList.map((b) => b.text);
-    const available = REALISTIC_SEEDS.filter((s) => !existingTexts.includes(s.text));
+    const available = seeds.filter((s) => !existingTexts.includes(s.text));
 
     const toAdd = available.slice(0, TARGET_COUNT - bucketList.length);
     const updated = [...bucketList];
@@ -190,6 +251,9 @@ export default function App() {
         text: seed.text,
         category: seed.category,
         cost: seed.cost,
+        costBreakdown: seed.costBreakdown,
+        rationale: seed.rationale,
+        feasibility: 'realistic',
         daysSpent: seed.daysSpent,
         lifespanDelta: seed.lifespanDelta,
         story: seed.story,
@@ -203,10 +267,10 @@ export default function App() {
     setBucketList(updated);
 
     if (updated.length >= TARGET_COUNT) {
-      triggerArgonProfiling(updated);
+      triggerArgonProfiling(updated, lang);
       setPhase('story_bridge');
     }
-  }, [bucketList, triggerArgonProfiling]);
+  }, [bucketList, lang, triggerArgonProfiling]);
 
   // Handle autostart query parameter for testing
   useEffect(() => {
@@ -248,19 +312,19 @@ export default function App() {
     setActiveStoryItem(selectedRecord);
     setPhase('story_result');
 
-    logWorker(`▶ 선택 #${turnNumber}: "${item.text.slice(0, 15)}..." (비용 -$${actualCost.toLocaleString()} / 수명 +${item.lifespanDelta}개월)`, false);
+    logWorker(`▶ Choice #${turnNumber}: "${item.text.slice(0, 15)}..." (-$${actualCost.toLocaleString()} / +${item.lifespanDelta}m)`, false);
   };
 
   // Step 3: Handle Other Option custom action via Gemini Flash
   const handleCustomAction = async (text: string) => {
     const nextId = bucketList.length + 1;
-    logWorker(`⚙️ [Gemini Flash] 자유 입력 소망 "${text}" 실시간 분석 중...`, true);
+    logWorker(`⚙️ [Gemini Flash] Analyzing custom wish "${text}"...`, true);
 
     try {
       const res = await fetch('/api/gemini/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, id: nextId })
+        body: JSON.stringify({ text, id: nextId, lang })
       });
       const data = await res.json();
 
@@ -294,7 +358,7 @@ export default function App() {
 
       setActiveStoryItem(selectedRecord);
       setPhase('story_result');
-      logWorker(`✅ [Gemini Flash] 자유 입력 분석 완료`, false);
+      logWorker(`✅ [Gemini Flash] Custom wish analyzed`, false);
     } catch {
       // Fallback
     }
@@ -324,8 +388,24 @@ export default function App() {
     );
     setEndingSlides(finalSlides);
     setPhase('ending');
-    logWorker('🌌 [Step 4] 프로스트펑크 시네마틱 엔딩 크로니클 시작 (0초 지연)', false);
+    logWorker('🌌 [Step 4] Frostpunk Cinematic Ending Chronicle started', false);
   };
+
+  // Re-compile ending slides if language changes during ending
+  useEffect(() => {
+    if (phase === 'ending') {
+      const updatedSlides = compileEndingSlides(
+        history,
+        bucketList,
+        profile,
+        INITIAL_BUDGET,
+        budget,
+        INITIAL_MONTHS,
+        months
+      );
+      setEndingSlides(updatedSlides);
+    }
+  }, [lang, phase, history, bucketList, profile, budget, months]);
 
   // Restart game
   const handleRestart = () => {
@@ -349,12 +429,39 @@ export default function App() {
         colorTheme === 'hanji' ? 'theme-hanji' : 'theme-black'
       }`}
     >
+      {/* Top Language & Quick Utility Bar */}
+      <header className="w-full max-w-3xl mx-auto flex items-center justify-between pb-2">
+        <div
+          className={`text-xs font-serif-kr tracking-wider ${
+            colorTheme === 'hanji' ? 'text-[#736a5c]' : 'text-neutral-400'
+          }`}
+        >
+          {lang === 'en' ? 'True Self Odyssey — 6 Months Left' : '진정한 나를 찾아가는 여정 — 시한부 6개월'}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleToggleLang}
+            className={`px-3 py-1.5 rounded-full border text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer shadow-xs ${
+              colorTheme === 'hanji'
+                ? 'bg-[#ffffff] hover:bg-[#ede6d6] text-[#1c1a18] border-[#cfc6b2]'
+                : 'bg-neutral-900 hover:bg-neutral-800 text-white border-neutral-700'
+            }`}
+            title={lang === 'en' ? '한국어로 전환 (Switch to Korean)' : 'Switch to English (영어로 전환)'}
+          >
+            <Globe className={`w-3.5 h-3.5 ${colorTheme === 'hanji' ? 'text-[#b83a2b]' : 'text-amber-400'}`} />
+            <span>{lang === 'en' ? '한국어 / EN' : 'EN / 한국어'}</span>
+          </button>
+        </div>
+      </header>
+
       {/* Creator Inspector Modal */}
       <SystemInspectorModal
         isOpen={isInspectorOpen}
         onClose={() => setIsInspectorOpen(false)}
         bucketList={bucketList}
+        profile={profile}
         colorTheme={colorTheme}
+        lang={lang}
       />
 
       {/* Main Game Stage */}
@@ -364,6 +471,7 @@ export default function App() {
             bucketList={bucketList}
             targetCount={TARGET_COUNT}
             colorTheme={colorTheme}
+            lang={lang}
             onAddItem={handleAddItem}
             onAutoFill={handleAutoFill}
           />
@@ -372,6 +480,7 @@ export default function App() {
         {phase === 'story_bridge' && (
           <StoryBridgeStep
             colorTheme={colorTheme}
+            lang={lang}
             onComplete={handleCompleteStoryBridge}
           />
         )}
@@ -383,6 +492,7 @@ export default function App() {
             months={months}
             historyCount={history.length}
             colorTheme={colorTheme}
+            lang={lang}
             onSelectItem={handleSelectItem}
             onCustomAction={handleCustomAction}
             onTriggerEnding={triggerEndingSequence}
@@ -396,6 +506,7 @@ export default function App() {
             currentMonths={months}
             isGameOver={budget <= 0 || bucketList.filter((b) => !b.selected).length === 0}
             colorTheme={colorTheme}
+            lang={lang}
             onContinue={handleContinueAfterStory}
           />
         )}
@@ -407,6 +518,7 @@ export default function App() {
             profile={profile}
             totalLifeGained={totalLifeGained}
             colorTheme={colorTheme}
+            lang={lang}
             onRestart={handleRestart}
           />
         )}
@@ -419,11 +531,27 @@ export default function App() {
         }`}
       >
         <div className="font-serif-kr">
-          진정한 나를 찾아가는 여행 (True Self Odyssey)
+          {lang === 'en'
+            ? 'True Self Odyssey (Powered by Gemini 4 Argon & Gemini 3.1 Flash)'
+            : '진정한 나를 찾아가는 여행 (True Self Odyssey)'}
         </div>
 
         {/* Minimal Utilities */}
         <div className="flex items-center gap-1.5">
+          {/* Language Toggle */}
+          <button
+            onClick={handleToggleLang}
+            className={`px-2.5 py-1 rounded transition flex items-center gap-1.5 cursor-pointer text-xs ${
+              colorTheme === 'hanji'
+                ? 'hover:bg-[#ebe3d0] text-[#5c5446]'
+                : 'hover:bg-neutral-800 text-neutral-400'
+            }`}
+            title="Language / 언어 전환"
+          >
+            <Globe className="w-3.5 h-3.5" />
+            <span>{lang === 'en' ? '한국어' : 'English'}</span>
+          </button>
+
           {/* Sound Toggle */}
           <button
             onClick={() => handleSoundPresetChange(soundPreset === 'mute' ? 'frostcello' : 'mute')}
@@ -432,10 +560,14 @@ export default function App() {
                 ? 'hover:bg-[#ebe3d0] text-[#5c5446]'
                 : 'hover:bg-neutral-800 text-neutral-400'
             }`}
-            title="배경음 전환"
+            title={lang === 'en' ? 'Toggle BGM' : '배경음 전환'}
           >
             {soundPreset === 'mute' ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-600" />}
-            <span>{soundPreset === 'mute' ? '음소거' : '배경음'}</span>
+            <span>
+              {soundPreset === 'mute'
+                ? lang === 'en' ? 'Muted' : '음소거'
+                : lang === 'en' ? 'Sound' : '배경음'}
+            </span>
           </button>
 
           {/* Theme Toggle */}
@@ -446,10 +578,14 @@ export default function App() {
                 ? 'hover:bg-[#ebe3d0] text-[#5c5446]'
                 : 'hover:bg-neutral-800 text-neutral-400'
             }`}
-            title="테마 전환"
+            title={lang === 'en' ? 'Switch Theme' : '테마 전환'}
           >
             <Palette className="w-3.5 h-3.5" />
-            <span>{colorTheme === 'hanji' ? '한지' : '칠흑'}</span>
+            <span>
+              {colorTheme === 'hanji'
+                ? lang === 'en' ? 'Hanji' : '한지'
+                : lang === 'en' ? 'Obsidian' : '칠흑'}
+            </span>
           </button>
 
           {/* System Inspector for Creator */}
@@ -460,10 +596,10 @@ export default function App() {
                 ? 'hover:bg-[#ebe3d0] text-[#736a5c]'
                 : 'hover:bg-neutral-800 text-neutral-400'
             }`}
-            title="시스템 산정 근거 (운영진용)"
+            title={lang === 'en' ? 'AI Architecture & Cost Inspector' : '시스템 산정 근거 (운영진용)'}
           >
             <FileSearch className="w-3.5 h-3.5" />
-            <span>산정 근거</span>
+            <span>{lang === 'en' ? 'AI Inspector' : '산정 근거'}</span>
           </button>
         </div>
       </footer>

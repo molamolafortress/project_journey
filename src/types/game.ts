@@ -29,6 +29,8 @@ export type SoundPreset = 'frostcello' | 'warmpiano' | 'heartbeat' | 'mute';
 
 export type ColorTheme = 'hanji' | 'black';
 
+export type Language = 'ko' | 'en';
+
 export interface EndingSlide {
   type: 'choice' | 'summary' | 'argon_profile' | 'artwork_awakening';
   turn?: number;
